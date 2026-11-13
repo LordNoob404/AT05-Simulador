@@ -114,7 +114,7 @@ Leitura do C4: o derating reduz Tmax em 5,31 °C ao custo de +6,03 min.
   (`CONCLUIDO` ≠ interrompido por proteção).
 - **`<ID>_T-P-SOC.png`** — T×t (com Td/Tc), P×t, SOC×t e Icmd×t, com unidades e legenda.
 
-## 6. Testes (`pytest tests/ -v`, 9 passando)
+## 6. Testes (`pytest tests/ -v`)
 
 `test_equacoes.py` (repouso I = 0; conferências 313,44 V/7836 W e 325,44 V/48816 W;
 Joule 60/2160 W; equilíbrios 26,2/68,2/126,4 °C; tempos 4320/720 s) ·
@@ -138,6 +138,8 @@ Joule 60/2160 W; equilíbrios 26,2/68,2/126,4 °C; tempos 4320/720 s) ·
 
 `model.py` (planta pura, sem I/O) · `supervisor.py` (BMS conceitual, sem I/O) ·
 `scenarios.py` (C1–C7 como dados reproduzíveis) · `run_simulation.py` (CLI + loop + artefatos) ·
-`plots.py` (gráficos) · `tests/` · `outputs/` (gerado, ignorado no git).
+`plots.py` (gráficos) · `validate.py` (validação RF09/RNF05, sem estado) ·
+`gui.py` (interface demonstrativa Tkinter, RNF04/RNF05 — executar com `python gui.py`) ·
+`docs/NORMAS.md` (checklist RNF06) · `tests/` (aceite) · `outputs/` (gerado, ignorado no git).
 
 Licença MIT — ver `LICENSE`.

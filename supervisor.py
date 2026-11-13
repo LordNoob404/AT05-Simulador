@@ -5,6 +5,11 @@ Implementa validação de presença/faixa/timeout/coerência, margens, derating,
 from dataclasses import dataclass
 import math
 from model import ModelConfig, uoc, validate_model_domain
+from validate import (
+    is_valid_number as _is_valid_number,
+    validate_config,
+    validate_sample_stateless,
+)
 
 
 @dataclass
@@ -54,10 +59,6 @@ def compute_electrical_limits(z: float, cfg: ModelConfig) -> tuple[float, float,
     return ilim, ip, iv
 
 
-def _is_valid_number(val: float | None) -> bool:
-    return val is not None and isinstance(val, (int, float)) and not math.isnan(val) and not math.isinf(val)
-
-
 class Supervisor:
     """Supervisor amostrado a 1 s com retenção de causa primária de falha e bloqueio."""
 
@@ -77,7 +78,7 @@ class Supervisor:
 
     def update_config(self, new_cfg: ModelConfig) -> tuple[bool, str]:
         """RNF05: Valida e aplica novos limites sem editar código; mantém anterior se incoerente."""
-        ok, reason = validate_model_domain(new_cfg)
+        ok, reason = validate_config(new_cfg)
         if not ok:
             return False, reason
         self.cfg = new_cfg
@@ -102,28 +103,22 @@ class Supervisor:
         return False, "REARME_NEGADO_HISTERESE"
 
     def validate_sample(self, sample: Sample, check_timeout: bool = True) -> tuple[bool, str]:
-        """RF09: Presença -> numérico -> faixa -> timestamp (<= 1 s) -> coerência e limites."""
-        if (not _is_valid_number(sample.timestamp) or
-                not _is_valid_number(sample.T_med) or
-                not _is_valid_number(sample.V_med) or
-                not _is_valid_number(sample.I_med)):
-            return False, "AMOSTRA_AUSENTE_OU_NAO_NUMERICA"
+        """RF09: Presença -> numérico -> faixa -> timestamp (<= 1 s) -> coerência e limites.
 
-        if check_timeout and self.last_timestamp is not None:
-            dt_sample = float(sample.timestamp) - self.last_timestamp
-            if dt_sample <= 0.0 or dt_sample > 1.0 + 1e-9:
-                return False, "AMOSTRA_VENCIDA_TIMEOUT"
+        Parte sem estado delegada a validate.py; aqui só o contador de travamento
+        (com estado) e a coerência opcional com o modelo.
+        """
+        valid, reason = validate_sample_stateless(
+            sample.timestamp, sample.T_med, sample.V_med, sample.I_med,
+            self.cfg.Vmax, self.cfg.Imax, self.cfg.Pmax,
+            last_timestamp=self.last_timestamp if check_timeout else None,
+        )
+        if not valid:
+            return False, reason
 
         T = float(sample.T_med)
         V = float(sample.V_med)
         I = float(sample.I_med)
-
-        if not (-20.0 <= T <= 100.0):
-            return False, "T_FORA_DE_FAIXA_SENSOR"
-        if not (0.0 <= V <= 500.0):
-            return False, "V_FORA_DE_FAIXA_SENSOR"
-        if not (-200.0 <= I <= 200.0):
-            return False, "I_FORA_DE_FAIXA_SENSOR"
 
         # Detecção de travamento com inconsistência física (constante por >= 5 ciclos sob alta geração térmica)
         if sample.stuck_fault:
@@ -141,15 +136,6 @@ class Supervisor:
             v_expected = uoc(sample.z_est) + self.cfg.R * I
             if abs(V - v_expected) > 15.0:
                 return False, "INCOERENCIA_MODELO_TENSAO"
-
-        # Verificação de limites elétricos operacionais medidos (C6)
-        P_med = V * I
-        if V > self.cfg.Vmax + 1e-6:
-            return False, "SOBRETENSAO_MEDIDA"
-        if I > self.cfg.Imax + 1e-6 or I < -1e-6:
-            return False, "SOBRECORRENTE_MEDIDA"
-        if P_med > self.cfg.Pmax + 1e-3:
-            return False, "SOBREPOTENCIA_MEDIDA"
 
         return True, "OK"
 
